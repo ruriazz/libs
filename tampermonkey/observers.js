@@ -51,3 +51,19 @@ window._NetworkObserver = {
         this.callbacks.set(urlPattern, callback);
     },
 };
+
+window.tamper = {
+    NetworkObserver: window._NetworkObserver,
+    isPopupAllowed: () => {
+        try {
+            const testWindow = window.open("about:blank", "_blank");
+            if (!testWindow || testWindow.closed || typeof testWindow.closed === "undefined") {
+                return false;
+            }
+            testWindow.close();
+            return true;
+        } catch (e) {
+            return false;
+        }
+    },
+};
