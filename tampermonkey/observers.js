@@ -3,12 +3,14 @@ window._NetworkObserver = {
 
     init() {
         // Combined XHR and Fetch interceptor
-        const handleResponse = async (url, status, response) => {
-            this.callbacks.forEach((callback, pattern) => {
-                if (url.includes(pattern)) {
+        const handleResponse = async (url, method, status, response) => {
+            this.callbacks.forEach((callback, key) => {
+                const [patternMethod, patternUrl] = key.split("|");
+                if (url.includes(patternUrl) && (patternMethod === "*" || patternMethod.toUpperCase() === method.toUpperCase())) {
                     callback({
                         success: status >= 200 && status < 300,
                         status,
+                        method,
                         response,
                     });
                 }
@@ -22,33 +24,38 @@ window._NetworkObserver = {
 
         XHR.open = function (method, url) {
             this._url = url;
+            this._method = method;
             return originalOpen.apply(this, arguments);
         };
 
         XHR.send = function () {
-            this.addEventListener("load", () => handleResponse(this._url, this.status, this.response));
+            this.addEventListener("load", () => handleResponse(this._url, this._method, this.status, this.response));
             return originalSend.apply(this, arguments);
         };
 
         // Fetch Interceptor
         window.fetch = new Proxy(window.fetch, {
             apply: async (target, thisArg, args) => {
+                const [resource, config = {}] = args;
+                const method = config.method || "GET";
+
                 try {
                     const response = await target.apply(thisArg, args);
                     const clone = response.clone();
                     const data = await clone.json();
-                    handleResponse(response.url, response.status, data);
+                    handleResponse(response.url, method, response.status, data);
                     return response;
                 } catch (error) {
-                    handleResponse(args[0], 0, { error });
+                    handleResponse(args[0], method, 0, { error });
                     throw error;
                 }
             },
         });
     },
 
-    onRequest(urlPattern, callback) {
-        this.callbacks.set(urlPattern, callback);
+    onRequest(urlPattern, method = "*", callback) {
+        const key = `${method}|${urlPattern}`;
+        this.callbacks.set(key, callback);
     },
 };
 
